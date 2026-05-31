@@ -24,11 +24,12 @@ jobs:
         with:
           node-version: '18'
 
+      # Clone the source OUTSIDE the checked-out repo so it is never staged.
       - name: Clone shared source (stressfreecruise-main)
-        run: git clone --depth 1 https://github.com/nitinsethi-cmyk/stressfreecruise-main.git source
+        run: git clone --depth 1 https://github.com/nitinsethi-cmyk/stressfreecruise-main.git "$RUNNER_TEMP/source"
 
       - name: Build testimonials page from dev/pug
-        working-directory: source
+        working-directory: ${{ runner.temp }}/source
         run: |
           # These task configs inline-require packages we don't need to compile
           # pug (rollup-plugin-babel / autoprefixer / postcss-csso). Drop them so a
@@ -39,12 +40,13 @@ jobs:
 
       - name: Sync built output into repo root (preserve subdomain CNAME)
         run: |
-          cp source/docs/testimonials.html index.html
+          SRC="$RUNNER_TEMP/source"
+          cp "$SRC/docs/testimonials.html" index.html
           rm -rf static
-          cp -r source/docs/static static
-          if [ -f source/docs/favicon.ico ]; then cp source/docs/favicon.ico favicon.ico; fi
+          cp -r "$SRC/docs/static" static
+          if [ -f "$SRC/docs/favicon.ico" ]; then cp "$SRC/docs/favicon.ico" favicon.ico; fi
           # Keep this repo pointed at the subdomain, not the apex.
-          cp source/dev/helpers/CNAME.testimonials CNAME
+          cp "$SRC/dev/helpers/CNAME.testimonials" CNAME
 
       - name: Commit and push if changed
         run: |
