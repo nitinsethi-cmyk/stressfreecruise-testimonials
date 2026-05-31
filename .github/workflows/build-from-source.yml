@@ -1,0 +1,59 @@
+name: Build testimonials from shared source
+
+# Manual-only: click "Run workflow" after changing shared templates
+# (e.g. dev/pug/helpers/head-src.pug) in stressfreecruise-main.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-testimonials
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout testimonials repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Clone shared source (stressfreecruise-main)
+        run: git clone --depth 1 https://github.com/nitinsethi-cmyk/stressfreecruise-main.git source
+
+      - name: Build testimonials page from dev/pug
+        working-directory: source
+        run: |
+          # These task configs inline-require packages we don't need to compile
+          # pug (rollup-plugin-babel / autoprefixer / postcss-csso). Drop them so a
+          # lean, pure-JS install is enough (no Ruby Sass, no native imagemin bins).
+          rm -f grunt_tasks/rollup.js grunt_tasks/postcss.js
+          npm install --no-save grunt@^1.0.1 grunt-cli grunt-contrib-pug@^2.0.0 load-grunt-config@^1.0.1
+          npx grunt pug:main
+
+      - name: Sync built output into repo root (preserve subdomain CNAME)
+        run: |
+          cp source/docs/testimonials.html index.html
+          rm -rf static
+          cp -r source/docs/static static
+          if [ -f source/docs/favicon.ico ]; then cp source/docs/favicon.ico favicon.ico; fi
+          # Keep this repo pointed at the subdomain, not the apex.
+          cp source/dev/helpers/CNAME.testimonials CNAME
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish; testimonials already up to date."
+          else
+            git commit -m "Rebuild testimonials from shared dev/pug source"
+            git push
+          fi
